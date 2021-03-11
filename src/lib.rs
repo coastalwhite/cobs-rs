@@ -1,4 +1,35 @@
-//! A no_std Consistent Overhead Byte Stuffing library
+//! A very minimal no_std [Consistent Overhead Byte
+//! Stuffing](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing) library
+//!
+//! ## Usage
+//!
+//! This library provides 2 functions.
+//!
+//! `stuff` and `unstuff` which encode and decode according to the COBS standard,
+//! respectively.
+//!
+//! ## Example
+//!
+//! ```rust
+//! let data: [u8; 254] = [
+//!     // ...snip
+//!     # 0; 254
+//! ];
+//!
+//! // Encode the data
+//! let encoded: [u8; 256] = cobs_rs::stuff(data, 0x00);
+//!
+//! // ... snip
+//!
+//! // Decode the data
+//! let decoded: [u8; 254] = cobs_rs::unstuff(encoded, 0x00);
+//!
+//! assert_eq!(data, decoded);
+//! ```
+//!
+//! ## License
+//!
+//! Licensed under a __MIT__ license.
 
 #![no_std]
 #![warn(missing_docs)]
@@ -11,14 +42,6 @@ struct MarkerInfo {
 }
 
 impl MarkerInfo {
-    fn new(index: usize, points_to: usize) -> MarkerInfo {
-        MarkerInfo { index, points_to }
-    }
-
-    fn does_it_point_to(&self, out_buffer_index: usize) -> bool {
-        self.points_to == out_buffer_index
-    }
-
     fn adjust_accordingly<const SIZE: usize>(
         &mut self,
         out_buffer: &mut [u8; SIZE],
@@ -31,16 +54,56 @@ impl MarkerInfo {
     }
 }
 
-/// Stuffs an input buffer into a output buffer
+/// Takes an input buffer and a marker value and COBS-encodes it to an output buffer.
+///
+/// Removes all occurrences of the marker value and adds one occurrence at the end. The returned
+/// buffer should at least be 2 greater than the input buffer and for every roughly 256 bytes an
+/// extra byte is conditionally added to the output buffer. All left-over space will and the end of
+/// the buffer and will be filled with the marker value.
+///
+/// ## Panics
+///
+/// This function panics if the output buffer has too little space to fill the data from the input
+/// buffer with.
+///
+/// ## Examples
+///
+/// ### Stuffing arbitrary data
+///
+/// ```
+/// let transfer: [u8; 256] = cobs_rs::stuff(
+///     *b"Hi everyone! This is a pretty nifty example.",
+///     b'i'
+/// );
+///
+/// // Now the data won't contain 'i's anymore except for the terminator byte.
+/// # assert!(transfer[..45].into_iter().all(|byte| *byte != b'i'));
+/// ```
+///
+/// ### Making sure there are no null bytes anymore
+///
+/// ```
+/// let data = [
+///     // ...snip
+/// #       1
+/// ];
+///
+/// let transfer: [u8; 256] = cobs_rs::stuff(data, 0x00);
+///
+/// // Now the data won't contain null bytes anymore except for the terminator byte.
+/// ```
 pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,
 ) -> [u8; OUTPUT] {
-    let mut output_buffer: [u8; OUTPUT] = [0; OUTPUT];
+    let mut output_buffer: [u8; OUTPUT] = [marker; OUTPUT];
 
     // Keep track of where the last marker was.
     // This always has one in the beginning, which is the overhead byte.
-    let mut last_marker = MarkerInfo::new(0, 0xff);
+    let mut last_marker = MarkerInfo {
+        index: 0,
+        points_to: 0xff,
+    };
 
     // Every time we set additional overhead marker, we should increase the offset.
     // This way we keep track what the relationship is between the input array indices and the
@@ -52,7 +115,7 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
         // Fetch the value of the input byte array.
         let value = buff[i];
 
-        if last_marker.does_it_point_to(overhead_bytes + i) {
+        if last_marker.points_to == (overhead_bytes + i) {
             // Update the last marker and set the marker info to this new overhead byte.
             last_marker.adjust_accordingly(&mut output_buffer, overhead_bytes + i);
 
@@ -74,14 +137,41 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
     }
 
     // For the last byte we update the previous marker.
-    last_marker.adjust_accordingly(&mut output_buffer, INPUT + overhead_bytes);
+    output_buffer[last_marker.index] = (INPUT + overhead_bytes - last_marker.index)
+        .try_into()
+        .unwrap();
     // And we set the value to the marker value in the output buffer.
     output_buffer[INPUT + overhead_bytes] = marker;
 
     output_buffer
 }
 
-/// Unstuffs a input buffer into a output buffer
+/// Takes an input buffer and a marker value and COBS-decodes it to an output buffer.
+///
+/// Removes all overhead bytes, inserts the marker where appropriate and __stops immediately__ when a marker value is found.
+/// The output buffer can be smaller than the input buffer. The maximum difference being 2 plus 1
+/// for every ~256 bytes.
+/// All left-over space will and the end of the buffer and will be filled with the `0x00` bytes.
+///
+/// ## Panics
+///
+/// This function panics if the output buffer has too little space to fill the data from the input
+/// buffer with.
+///
+/// ## Examples
+///
+/// ```
+/// let transferred_data = [
+///     // ... snip
+/// # 0x01, 0x01, 0x00
+/// ];
+///
+/// // We convert the COBS-encoded transferred_data to the plain data
+/// // using the unstuff function.
+/// let plain_data: [u8; 256] = cobs_rs::unstuff(transferred_data, 0x00);
+///
+/// // ... snip
+/// ```
 pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,
