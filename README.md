@@ -15,7 +15,6 @@ respectively.
 ```rust
 let data: [u8; 254] = [
     // ...snip
-    # 0; 254
 ];
 
 // Encode the data
