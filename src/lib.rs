@@ -1,31 +1,96 @@
 //! A very minimal no_std [Consistent Overhead Byte
-//! Stuffing](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing) library
+//! Stuffing](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing)
+//! library written in Rust. The COBS algorithm, and thus also this crate, provides
+//! an encoding for arbitrary data which removes any occurrence of a specific marker
+//! byte. This is mostly useful when we are transferring arbitrary data which
+//! is terminated with a null byte, and therefore we don't want our arbitrary data
+//! buffer to contain any null bytes. In fact, this crate will automatically the
+//! marker byte at the end of any encoded buffer.
+//!
+//! ## Features
+//!
+//! The *cobs-rs* crate only provides two specific functions. Namely, the
+//! [`stuff`] and the [`unstuff`] function, which encode and decode respectively. This, together
+//! with the fact that the crate doesn't use the [`std`](https://doc.rust-lang.org/std/index.html),
+//! makes the crate perfect for embedded hardware. However, it can also be used outside of embedded
+//! systems.
 //!
 //! ## Usage
 //!
-//! This library provides 2 functions.
+//! Both the encode([`stuff`]) and decode([`unstuff`]) functions, use [const
+//! generics](https://blog.rust-lang.org/2021/02/26/const-generics-mvp-beta). This
+//! may make usage a bit counter-intuitive for people unfamiliar with this feature
+//! at first.
 //!
-//! `stuff` and `unstuff` which encode and decode according to the COBS standard,
-//! respectively.
+//! Something to take into account here is that the COBS algorithm will __at most__
+//! add `2 + (size of input buffer / 256)` (with integer division) bytes to the
+//! encoded buffer in size compared to input buffer. This fact allows us to always
+//! reserve enough space for the output buffer.
 //!
-//! ## Example
+//! ### Encoding buffers
 //!
-//! ```rust
+//! Let us have a look at a small example of how to encode some data using the
+//! [`stuff`] function.
+//!
+//! ```no_run
 //! let data: [u8; 254] = [
 //!     // ...snip
-//!     # 0; 254
+//! # 0; 254
 //! ];
 //!
-//! // Encode the data
+//! // Our input buffer is 254 bytes long.
+//! // Thus, we need to reserve 2 + (254 / 256) = 2 extra bytes
+//! // for the encoded buffer.
 //! let encoded: [u8; 256] = cobs_rs::stuff(data, 0x00);
 //!
-//! // ... snip
+//! // We can also encode much larger buffers
+//! let a_lot_of_data: [u8; 1337] = [
+//!     // ...snip
+//! # 0; 1337
+//! ];
 //!
-//! // Decode the data
-//! let decoded: [u8; 254] = cobs_rs::unstuff(encoded, 0x00);
-//!
-//! assert_eq!(data, decoded);
+//! // Our input buffer is 1337 bytes long.
+//! // Thus, we need to reserve 2 + (1337 / 256) = 7 extra bytes
+//! // for the encoded buffer.
+//! let a_lot_of_output: [u8; 1344] = cobs_rs::stuff(a_lot_of_data, 0x00);
 //! ```
+//!
+//! > **Note:** The output buffer type specifications are always necessary. The type
+//! > specifications for the input data isn't necessary most of the time.
+//!
+//! ### Decoding buffers
+//!
+//! Now, let us look at an example of how to decode data using the [`unstuff`] function.
+//!
+//! It is generally a good idea to reserve `size of encoded buffer - 2` bytes for
+//! the decoded buffer. With this rule, we will always have enough space for the
+//! encoded buffer. Next to the decoded buffer, the [`unstuff`] function will
+//! also return the actual filled size of the buffer.
+//!
+//! ```no_run
+//! // We are given some encoded data buffer
+//! let encoded_data: [u8; 256] = [
+//!     //... snip
+//! # 0; 256
+//! ];
+//!
+//! // We reserve 256 - 2 = 254 bytes for the decoded buffer.
+//! let (decoded_data, decoded_data_length): ([u8; 254], usize) =
+//!     cobs_rs::unstuff(encoded_data, 0x00);
+//!
+//! // We can also decode bigger buffers
+//! let a_lot_of_encoded_data: [u8; 1344] = [
+//!     //... snip
+//! # 0; 1344
+//! ];
+//!
+//! // We reserve 1344 - 2 = 1342 bytes for the decoded buffer.
+//! let (a_lot_of_decoded_data, a_lot_of_decoded_data_length): ([u8; 1342], usize) =
+//!     cobs_rs::unstuff(encoded_data, 0x00);
+//! ```
+//!
+//! > **Note:** The decoded buffer type specifications are always necessary. The
+//! > type specifications for the encoded data isn't necessary most of the time.
 //!
 //! ## License
 //!
@@ -61,14 +126,9 @@ impl MarkerInfo {
 /// extra byte is conditionally added to the output buffer. All left-over space will and the end of
 /// the buffer and will be filled with the marker value.
 ///
-/// ## Panics
+/// # Examples
 ///
-/// This function panics if the output buffer has too little space to fill the data from the input
-/// buffer with.
-///
-/// ## Examples
-///
-/// ### Stuffing arbitrary data
+/// ## Stuffing arbitrary data
 ///
 /// ```
 /// let transfer: [u8; 256] = cobs_rs::stuff(
@@ -80,7 +140,7 @@ impl MarkerInfo {
 /// # assert!(transfer[..45].into_iter().all(|byte| *byte != b'i'));
 /// ```
 ///
-/// ### Making sure there are no null bytes anymore
+/// ## Making sure there are no null bytes anymore
 ///
 /// ```
 /// let data = [
@@ -92,6 +152,12 @@ impl MarkerInfo {
 ///
 /// // Now the data won't contain null bytes anymore except for the terminator byte.
 /// ```
+///
+/// # Panics
+///
+/// This function panics, if the output buffer has too little space to fill the data from the input
+/// buffer with.
+///
 pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,
@@ -140,42 +206,45 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
     output_buffer[last_marker.index] = (INPUT + overhead_bytes - last_marker.index)
         .try_into()
         .unwrap();
-    // And we set the value to the marker value in the output buffer.
-    output_buffer[INPUT + overhead_bytes] = marker;
 
     output_buffer
 }
 
 /// Takes an input buffer and a marker value and COBS-decodes it to an output buffer.
 ///
-/// Removes all overhead bytes, inserts the marker where appropriate and __stops immediately__ when a marker value is found.
-/// The output buffer can be smaller than the input buffer. The maximum difference being 2 plus 1
-/// for every ~256 bytes.
-/// All left-over space will and the end of the buffer and will be filled with the `0x00` bytes.
+/// Removes all overhead bytes, inserts the marker where appropriate and __stops immediately__ when
+/// a marker value is found. The size of output buffer is at least 2 bytes smaller than the size
+/// of the input buffer. All left-over space will and the end of the buffer and will be filled with
+/// the `0x00` bytes. The tuple returned contains both the decoded buffer and the actual filled
+/// length of that buffer.
 ///
-/// ## Panics
+/// # Examples
 ///
-/// This function panics if the output buffer has too little space to fill the data from the input
-/// buffer with.
-///
-/// ## Examples
-///
-/// ```
-/// let transferred_data = [
+/// ```no_run
+/// let transferred_data: [u8; 258] = [
 ///     // ... snip
-/// # 0x01, 0x01, 0x00
+/// # 0; 258
 /// ];
 ///
 /// // We convert the COBS-encoded transferred_data to the plain data
 /// // using the unstuff function.
-/// let plain_data: [u8; 256] = cobs_rs::unstuff(transferred_data, 0x00);
+/// let (plain_data, plain_data_length): ([u8; 256], usize) =
+///     cobs_rs::unstuff(transferred_data, 0x00);
 ///
 /// // ... snip
 /// ```
+///
+/// # Panics
+///
+/// Panics if we don't have don't have a marker value in the input buffer.
+///
+/// This function panics if the output buffer has too little space to fill the data from the input
+/// buffer with. This never happens if we reserve enough memory for the output, that being two less
+/// bytes than the input buffer.
 pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,
-) -> [u8; OUTPUT] {
+) -> ([u8; OUTPUT], usize) {
     let mut output_buffer = [0; OUTPUT];
 
     // Keep track when the next marker will be. Initial this will be after the first overhead byte
@@ -190,13 +259,15 @@ pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
     let mut overhead_bytes = 1;
 
     // We can skip byte since it is the overhead byte we already know about.
-    for i in 1..INPUT {
+    let mut i = 1;
+
+    let output_buffer_length = loop {
         // Fetch the value from the input buffer.
         let value = buff[i];
 
         // If we value is the marker, we know we have reached the end.
         if value == marker {
-            break;
+            break i;
         }
 
         // If the current character is a marker or a overhead byte.
@@ -221,9 +292,15 @@ pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
         }
 
         until_next_marker -= 1;
-    }
 
-    output_buffer
+        if i < INPUT {
+            i += 1;
+        } else {
+            panic!("No marker value found!");
+        }
+    } + 1;
+
+    (output_buffer, output_buffer_length)
 }
 
 #[cfg(test)]
@@ -252,20 +329,20 @@ mod tests {
         fn assert_unstuff(&self) {
             assert_eq!(
                 unstuff::<M, N>(self.encoded_data, 0x00),
-                self.unencoded_data
+                (self.unencoded_data, self.encoded_data.len())
             );
         }
 
         fn assert_stuff_then_unstuff(&self) {
             assert_eq!(
                 unstuff::<M, N>(stuff(self.unencoded_data, 0x00), 0x00),
-                self.unencoded_data
+                (self.unencoded_data, self.encoded_data.len())
             );
         }
 
         fn assert_unstuff_then_stuff(&self) {
             assert_eq!(
-                stuff::<N, M>(unstuff(self.encoded_data, 0x00), 0x00),
+                stuff::<N, M>(unstuff(self.encoded_data, 0x00).0, 0x00),
                 self.encoded_data
             );
         }
