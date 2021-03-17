@@ -122,8 +122,8 @@ impl MarkerInfo {
 /// Takes an input buffer and a marker value and COBS-encodes it to an output buffer.
 ///
 /// Removes all occurrences of the marker value and adds one occurrence at the end. The returned
-/// buffer should at least be 2 greater than the input buffer and for every roughly 256 bytes an
-/// extra byte is conditionally added to the output buffer. All left-over space will and the end of
+/// buffer should at least be 2 greater than the input buffer and for roughly 256 bytes there is a
+/// possibility for an extra byte in the output buffer. All left-over space will and the end of
 /// the buffer and will be filled with the marker value.
 ///
 /// # Examples
@@ -155,9 +155,8 @@ impl MarkerInfo {
 ///
 /// # Panics
 ///
-/// This function panics, if the output buffer has too little space to fill the data from the input
-/// buffer with.
-///
+/// This function panics when the output buffer doesn't have enough space to fill the data from the
+/// input buffer with.
 pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,
@@ -236,11 +235,11 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
 ///
 /// # Panics
 ///
-/// Panics if we don't have don't have a marker value in the input buffer.
+/// If we don't have a marker value in the encoded data buffer, the function panics.
 ///
-/// This function panics if the output buffer has too little space to fill the data from the input
-/// buffer with. This never happens if we reserve enough memory for the output, that being two less
-/// bytes than the input buffer.
+/// This function also panics when the output buffer doesn't have enough space to fill the data
+/// from the input buffer with. This never happens if we reserve the maximum possible memory for
+/// the output, that being two less bytes than the input buffer.
 pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
     buff: [u8; INPUT],
     marker: u8,

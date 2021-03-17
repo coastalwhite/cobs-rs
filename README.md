@@ -1,5 +1,8 @@
 # COBS-RS
 
+![GitHub](https://img.shields.io/github/license/coastalwhite/cobs-rs)
+![docs.rs](https://img.shields.io/docsrs/cobs-rs)
+
 A very minimal no_std [Consistent Overhead Byte
 Stuffing](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing)
 library written in Rust. The COBS algorithm, and thus also this crate, provides
@@ -8,6 +11,8 @@ byte. This is mostly useful when we are transferring arbitrary data which
 is terminated with a null byte, and therefore we don't want our arbitrary data
 buffer to contain any null bytes. In fact, this crate will automatically the
 marker byte at the end of any encoded buffer.
+
+Take a look at [the documentation](https://docs.rs/cobs-rs/).
 
 ## Features
 
