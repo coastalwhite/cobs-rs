@@ -266,7 +266,7 @@ pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
 
         // If we value is the marker, we know we have reached the end.
         if value == marker {
-            break i;
+            break i - overhead_bytes - 1;
         }
 
         // If the current character is a marker or a overhead byte.
@@ -328,14 +328,14 @@ mod tests {
         fn assert_unstuff(&self) {
             assert_eq!(
                 unstuff::<M, N>(self.encoded_data, 0x00),
-                (self.unencoded_data, self.encoded_data.len())
+                (self.unencoded_data, self.unencoded_data.len())
             );
         }
 
         fn assert_stuff_then_unstuff(&self) {
             assert_eq!(
                 unstuff::<M, N>(stuff(self.unencoded_data, 0x00), 0x00),
-                (self.unencoded_data, self.encoded_data.len())
+                (self.unencoded_data, self.unencoded_data.len())
             );
         }
 
@@ -499,6 +499,15 @@ mod tests {
         tv_8().assert_unstuff();
         tv_9().assert_unstuff();
         tv_10().assert_unstuff();
+
+        assert_eq!(
+            unstuff([0x01, 0x01, 0x00], 0x00),
+            ([0x00, 0x00, 0x00, 0x00], 1)
+        );
+        assert_eq!(
+            unstuff([0x02, 0x01, 0x00], 0x00),
+            ([0x01, 0x00, 0x00, 0x00], 1)
+        );
     }
 
     #[test]
