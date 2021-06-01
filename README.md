@@ -9,7 +9,7 @@ library written in Rust. The COBS algorithm, and thus also this crate, provides
 an encoding for arbitrary data which removes any occurrence of a specific marker
 byte. This is mostly useful when we are transferring arbitrary data which
 is terminated with a null byte, and therefore we don't want our arbitrary data
-buffer to contain any null bytes. In fact, this crate will automatically the
+buffer to contain any null bytes. In fact, this crate will automatically append the
 marker byte at the end of any encoded buffer.
 
 Take a look at [the documentation](https://docs.rs/cobs-rs/).
