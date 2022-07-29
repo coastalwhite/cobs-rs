@@ -206,6 +206,12 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
         .try_into()
         .unwrap();
 
+    if marker != 0x00 {
+        for i in 0..(OUTPUT - 1) {
+            output_buffer[i] ^= marker;
+        }
+    }
+
     output_buffer
 }
 
@@ -241,10 +247,17 @@ pub fn stuff<const INPUT: usize, const OUTPUT: usize>(
 /// from the input buffer with. This never happens if we reserve the maximum possible memory for
 /// the output, that being two less bytes than the input buffer.
 pub fn unstuff<const INPUT: usize, const OUTPUT: usize>(
-    buff: [u8; INPUT],
+    mut buff: [u8; INPUT],
     marker: u8,
 ) -> ([u8; OUTPUT], usize) {
     let mut output_buffer = [0; OUTPUT];
+
+    // Remove all occurrences of the marker byte
+    if marker != 0x00 {
+        for i in 0..(INPUT - 1) {
+            buff[i] ^= marker;
+        }
+    }
 
     // Keep track when the next marker will be. Initial this will be after the first overhead byte
     // value. We have to do minus 1 here, because we start our loop at 1 instead of 0.
@@ -533,5 +546,17 @@ mod tests {
         tv_8().assert_unstuff_then_stuff();
         tv_9().assert_unstuff_then_stuff();
         tv_10().assert_unstuff_then_stuff();
+    }
+
+    // Issue #1: https://github.com/coastalwhite/cobs-rs/issues/1
+    #[test]
+    fn non_zero_byte() {
+        let transfer: [u8; 130] = stuff(
+            *b"----------------------------------------------------------------A----------------------------------------------------------------",
+            b'A'
+        );
+
+        // Now the data won't contain 'i's anymore except for the terminator byte.
+        assert!(transfer.iter().all(|byte| *byte != b'A'));
     }
 }

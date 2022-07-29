@@ -2,7 +2,7 @@
 name = "cobs-rs"
 authors = ["Gijs Burghoorn <me@gburghoorn.com>"]
 description = "A minimal no-std library for doing Consistent Overhead Byte Stuffing"
-version = "1.1.1"
+version = "1.1.2"
 
 edition = "2018"
 
